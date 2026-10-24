@@ -1,10 +1,9 @@
-// Service Worker for DSA Practical Workbench
-// Enables 100% offline access for raambad-ilaaj.vercel.app
+// Robust Offline Service Worker for DSA Practical Workbench
+// Version 2: Complete Precache & Cache-First Architecture for 100% Offline Support
 
-const CACHE_NAME = 'dsa-workbench-cache-v1';
+const CACHE_NAME = 'dsa-workbench-cache-v2';
 
-// Static assets to precache immediately on install
-const PRECACHE_URLS = [
+const STATIC_PRECACHE = [
   '/',
   '/index.html',
   '/favicon.svg',
@@ -21,78 +20,125 @@ const PRECACHE_URLS = [
   '/programs/exp9_flight_paths_graph.c',
 ];
 
-// Install Event: precache core assets
+// Install: precache static files AND parse index.html to precache JS/CSS bundles
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_URLS);
-    }).then(() => self.skipWaiting())
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      // Precache known static URLs
+      await cache.addAll(STATIC_PRECACHE);
+
+      // Fetch index.html and extract bundled JS and CSS to ensure they are precached
+      try {
+        const response = await fetch('/index.html', { cache: 'no-cache' });
+        if (response && response.status === 200) {
+          const html = await response.text();
+          // Extract scripts and CSS link hrefs
+          const scriptMatches = Array.from(html.matchAll(/src="([^"]+\.js)"/g), (m) => m[1]);
+          const styleMatches = Array.from(html.matchAll(/href="([^"]+\.css)"/g), (m) => m[1]);
+          const bundleUrls = Array.from(new Set([...scriptMatches, ...styleMatches]));
+          if (bundleUrls.length > 0) {
+            await cache.addAll(bundleUrls);
+          }
+        }
+      } catch (err) {
+        console.warn('ServiceWorker: Precache bundle extraction error:', err);
+      }
+    })()
   );
 });
 
-// Activate Event: cleanup older caches
+// Activate: clean up older caches and take immediate control
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((name) => {
-          if (name !== CACHE_NAME) {
-            return caches.delete(name);
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
           }
         })
       );
-    }).then(() => self.clients.claim())
+      await self.clients.claim();
+    })()
   );
 });
 
-// Fetch Event: Stale-While-Revalidate with Cache-First Fallback
+// Fetch: Instant Cache-First strategy with Stale-While-Revalidate background update
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  const url = new URL(req.url);
-
-  // Only handle GET requests
   if (req.method !== 'GET') return;
 
-  // Handle SPA navigation requests
+  const url = new URL(req.url);
+
+  // 1. Navigation requests (loading the web page or refreshing)
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req).catch(() => {
-        return caches.match('/index.html') || caches.match('/');
-      })
+      (async () => {
+        // Check cache first for instant offline load
+        const cached = await caches.match(req) || 
+                       await caches.match('/index.html') || 
+                       await caches.match('/');
+
+        // If online, attempt background fetch to refresh the cache
+        const networkFetch = fetch(req)
+          .then(async (networkRes) => {
+            if (networkRes && networkRes.status === 200) {
+              const cache = await caches.open(CACHE_NAME);
+              cache.put(req, networkRes.clone());
+            }
+            return networkRes;
+          })
+          .catch(() => null);
+
+        // If cached response exists, return it immediately!
+        if (cached) {
+          return cached;
+        }
+
+        // Otherwise wait for network response
+        const res = await networkFetch;
+        if (res) return res;
+
+        // Ultimate fallback
+        return (await caches.match('/index.html')) || new Response('Offline', { status: 503 });
+      })()
     );
     return;
   }
 
-  // Handle same-origin assets & fonts
+  // 2. Static assets: JS, CSS, fonts, SVG icons, and C program files
   event.respondWith(
-    caches.match(req).then((cachedResponse) => {
-      const fetchPromise = fetch(req)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              // Cache Vite bundled assets, fonts, and programs
-              if (
-                url.origin === self.location.origin ||
-                url.hostname.includes('fonts.googleapis.com') ||
-                url.hostname.includes('fonts.gstatic.com')
-              ) {
-                cache.put(req, responseClone);
-              }
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // If offline and not in cache, fallback to index.html for page loads
-          if (req.mode === 'navigate') {
-            return caches.match('/index.html');
-          }
-          return null;
-        });
+    (async () => {
+      // Look in cache first
+      const cached = await caches.match(req, { ignoreSearch: true });
+      if (cached) {
+        // Asynchronously update in background if online
+        fetch(req)
+          .then(async (netRes) => {
+            if (netRes && netRes.status === 200) {
+              const cache = await caches.open(CACHE_NAME);
+              cache.put(req, netRes);
+            }
+          })
+          .catch(() => {});
+        return cached;
+      }
 
-      // Return cached response immediately if found, otherwise wait for network
-      return cachedResponse || fetchPromise;
-    })
+      // If not in cache, fetch from network and store in cache
+      try {
+        const netRes = await fetch(req);
+        if (netRes && netRes.status === 200) {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(req, netRes.clone());
+        }
+        return netRes;
+      } catch (err) {
+        // If offline and asset is missing, return empty response instead of fatal crash
+        return new Response('', { status: 408 });
+      }
+    })()
   );
 });

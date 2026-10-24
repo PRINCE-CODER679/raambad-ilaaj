@@ -48,14 +48,21 @@ createRoot(document.getElementById('root')).render(
 
 // Register Service Worker for 100% offline access
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((registration) => {
-        console.log('DSA Workbench: ServiceWorker registered successfully with scope:', registration.scope);
-      })
-      .catch((error) => {
-        console.warn('DSA Workbench: ServiceWorker registration failed:', error);
-      });
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      console.log('DSA Workbench: ServiceWorker active:', registration.scope);
+
+      // Cache warming: ensure current assets and page are saved in Cache Storage
+      if ('caches' in window) {
+        const cache = await caches.open('dsa-workbench-cache-v2');
+        const scriptUrls = Array.from(document.querySelectorAll('script[src]'), (el) => el.src);
+        const styleUrls = Array.from(document.querySelectorAll('link[rel="stylesheet"]'), (el) => el.href);
+        const assetsToWarm = [window.location.origin + '/', window.location.origin + '/index.html', ...scriptUrls, ...styleUrls];
+        await Promise.allSettled(assetsToWarm.map((url) => cache.add(url)));
+      }
+    } catch (error) {
+      console.warn('DSA Workbench: ServiceWorker registration failed:', error);
+    }
   });
 }
