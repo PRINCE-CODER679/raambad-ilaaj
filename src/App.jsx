@@ -10,12 +10,17 @@ import {
   CheckCircle2,
   ListOrdered,
   Binary,
-  Layers
+  Layers,
+  Download,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 export default function App() {
   const [selectedId, setSelectedId] = useState(1);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   // Sync with URL hash
   useEffect(() => {
@@ -31,6 +36,37 @@ export default function App() {
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
+
+  // Monitor network status & install prompt
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   const currentExp = experimentsData.find((exp) => exp.id === selectedId) || experimentsData[0];
 
@@ -87,6 +123,41 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-2 font-mono">
+            {/* Install App button if prompt available */}
+            {deferredPrompt && (
+              <button
+                onClick={handleInstallApp}
+                className="hidden sm:inline-flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-sm transition-all cursor-pointer active:scale-95"
+                title="Install as offline app on your device"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Install</span>
+              </button>
+            )}
+
+            {/* Offline Status Badge */}
+            <span
+              className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                isOnline
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
+                  : 'bg-amber-950/80 text-amber-300 border-amber-600 animate-pulse'
+              }`}
+              title={
+                isOnline
+                  ? 'Cached & 100% accessible offline'
+                  : 'Currently offline — using locally cached data'
+              }
+            >
+              {isOnline ? (
+                <Wifi className="w-3 h-3 text-emerald-400 shrink-0" />
+              ) : (
+                <WifiOff className="w-3 h-3 text-amber-400 shrink-0" />
+              )}
+              <span className="hidden sm:inline">
+                {isOnline ? 'Offline Ready' : 'Working Offline'}
+              </span>
+            </span>
+
             <span className="hidden md:inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-900 text-cyan-300 border border-slate-700/80">
               <span className="text-slate-500 mr-1.5">INDEX:</span>
               <span className="font-bold">{currentExp.number}</span>
