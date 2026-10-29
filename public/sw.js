@@ -1,7 +1,7 @@
 // Robust Offline Service Worker for DSA Practical Workbench
 // Version 2: Complete Precache & Cache-First Architecture for 100% Offline Support
 
-const CACHE_NAME = 'dsa-workbench-cache-v2';
+const CACHE_NAME = 'dsa-workbench-cache-v3';
 
 const STATIC_PRECACHE = [
   '/',

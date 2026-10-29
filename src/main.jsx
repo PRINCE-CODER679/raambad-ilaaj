@@ -55,7 +55,7 @@ if ('serviceWorker' in navigator) {
 
       // Cache warming: ensure current assets and page are saved in Cache Storage
       if ('caches' in window) {
-        const cache = await caches.open('dsa-workbench-cache-v2');
+        const cache = await caches.open('dsa-workbench-cache-v3');
         const scriptUrls = Array.from(document.querySelectorAll('script[src]'), (el) => el.src);
         const styleUrls = Array.from(document.querySelectorAll('link[rel="stylesheet"][href^="/"]'), (el) => el.href);
         const assetsToWarm = [window.location.origin + '/', window.location.origin + '/index.html', ...scriptUrls, ...styleUrls];
