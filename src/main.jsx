@@ -57,7 +57,7 @@ if ('serviceWorker' in navigator) {
       if ('caches' in window) {
         const cache = await caches.open('dsa-workbench-cache-v2');
         const scriptUrls = Array.from(document.querySelectorAll('script[src]'), (el) => el.src);
-        const styleUrls = Array.from(document.querySelectorAll('link[rel="stylesheet"]'), (el) => el.href);
+        const styleUrls = Array.from(document.querySelectorAll('link[rel="stylesheet"][href^="/"]'), (el) => el.href);
         const assetsToWarm = [window.location.origin + '/', window.location.origin + '/index.html', ...scriptUrls, ...styleUrls];
         await Promise.allSettled(assetsToWarm.map((url) => cache.add(url)));
       }
