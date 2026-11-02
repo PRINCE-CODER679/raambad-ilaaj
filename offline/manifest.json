@@ -1,0 +1,25 @@
+{
+  "name": "DSA Practical Workbench",
+  "short_name": "DSA Practical",
+  "description": "ISO C99 programs, questions, and verified outputs for all 9 Data Structures and Algorithms lab practical experiments.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070a12",
+  "theme_color": "#080d19",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
